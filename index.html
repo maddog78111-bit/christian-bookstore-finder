@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>주변 기독교서점 찾기</title>
+<meta name="description" content="내 위치 주변의 기독교 서점을 찾아드립니다.">
+<meta name="theme-color" content="#1a5d3a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root { --green:#1a5d3a; --light:#e8f3ec; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; height:100%; font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif; }
+  body { display:flex; flex-direction:column; }
+  header { background:var(--green); color:#fff; padding:10px 14px; display:flex; align-items:center; gap:10px; flex-shrink:0; }
+  header h1 { font-size:17px; margin:0; flex-shrink:0; }
+  #search { flex:1; min-width:0; padding:7px 10px; border:none; border-radius:18px; font-size:14px; outline:none; }
+  #map { flex:1; min-height:38vh; }
+  #locateBtn { position:absolute; z-index:1000; right:12px; margin-top:12px; width:42px; height:42px; border-radius:50%;
+    background:#fff; border:none; box-shadow:0 2px 6px rgba(0,0,0,.35); font-size:20px; cursor:pointer; }
+  #list { height:42vh; overflow-y:auto; background:#fafafa; flex-shrink:0; -webkit-overflow-scrolling:touch; }
+  .store { background:#fff; margin:8px 10px; padding:12px 14px; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.12); }
+  .store-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .store-name { font-weight:bold; font-size:15px; color:#222; }
+  .store-dist { color:var(--green); font-weight:bold; font-size:13px; white-space:nowrap; }
+  .store-addr { font-size:12.5px; color:#666; margin-top:4px; line-height:1.45; }
+  .store-actions { display:flex; gap:8px; margin-top:9px; }
+  .btn { flex:1; text-align:center; padding:8px 0; border-radius:8px; font-size:13px; text-decoration:none; font-weight:bold; }
+  .btn-call { background:var(--light); color:var(--green); }
+  .btn-nav { background:var(--green); color:#fff; }
+  .btn[aria-disabled="true"] { opacity:.4; pointer-events:none; }
+  #status { text-align:center; font-size:12.5px; color:#888; padding:8px; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📖 주변 기독교서점</h1>
+  <input id="search" type="search" placeholder="서점명·지역 검색 (예: 부산)">
+</header>
+<div id="map"></div>
+<div id="list"><div id="status">위치 확인 중…</div></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="stores.js"></script>
+<script>
+const map = L.map('map', { zoomControl:false }).setView([36.5, 127.8], 7);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom:19, attribution:'&copy; OpenStreetMap'
+}).addTo(map);
+L.control.zoom({ position:'bottomright' }).addTo(map);
+
+const locateBtn = document.createElement('button');
+locateBtn.id = 'locateBtn'; locateBtn.title = '내 위치'; locateBtn.textContent = '📍';
+document.getElementById('map').appendChild(locateBtn);
+
+const storeIcon = L.divIcon({ className:'',
+  html:'<svg width="24" height="35" viewBox="0 0 26 38"><path d="M13 0C5.8 0 0 5.8 0 13c0 9.8 13 25 13 25s13-15.2 13-25C26 5.8 20.2 0 13 0z" fill="#1a5d3a"/><circle cx="13" cy="13" r="5.5" fill="#fff"/></svg>',
+  iconSize:[24,35], iconAnchor:[12,35], popupAnchor:[0,-33] });
+
+let myPos = null, myMarker = null;
+
+function dist(a, b, c, d) {
+  const R = 6371, p = Math.PI/180;
+  const x = Math.sin((c-a)*p/2)**2 + Math.cos(a*p)*Math.cos(c*p)*Math.sin((d-b)*p/2)**2;
+  return 2*R*Math.asin(Math.sqrt(x));
+}
+function fmtDist(km) { return km < 1 ? Math.round(km*1000)+'m' : km.toFixed(1)+'km'; }
+
+const markers = {};
+STORES.forEach((s, i) => {
+  markers[i] = L.marker([s.la, s.lo], { icon: storeIcon })
+    .bindPopup('<b>' + s.n + '</b><br><small>' + s.a + '</small>' +
+      (s.t ? '<br><a href="tel:' + s.t.replace(/[^0-9+]/g,'') + '">📞 ' + s.t + '</a>' : ''))
+    .addTo(map);
+});
+
+function render(filter) {
+  const list = document.getElementById('list');
+  let items = STORES.map((s, i) => ({ ...s, i, d: myPos ? dist(myPos.lat, myPos.lng, s.la, s.lo) : null }));
+  if (filter) {
+    const f = filter.toLowerCase();
+    items = items.filter(s => s.n.toLowerCase().includes(f) || s.a.toLowerCase().includes(f));
+  }
+  if (myPos) items.sort((a, b) => a.d - b.d);
+
+  let html = '';
+  if (!myPos) html += '<div id="status">📍 버튼을 누르면 가까운 순으로 정렬됩니다</div>';
+  if (!items.length) html += '<div id="status">검색 결과가 없습니다</div>';
+  items.slice(0, 100).forEach(s => {
+    const telClean = (s.t || '').replace(/[^0-9+]/g, '');
+    html += '<div class="store" data-i="' + s.i + '">'
+      + '<div class="store-top"><span class="store-name">' + s.n + '</span>'
+      + (s.d != null ? '<span class="store-dist">' + fmtDist(s.d) + '</span>' : '') + '</div>'
+      + '<div class="store-addr">' + s.a + '</div>'
+      + '<div class="store-actions">'
+      + '<a class="btn btn-call" ' + (telClean ? 'href="tel:' + telClean + '"' : 'aria-disabled="true"') + '>📞 전화</a>'
+      + '<a class="btn btn-nav" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=' + s.la + ',' + s.lo + '">🧭 길안내</a>'
+      + '</div></div>';
+  });
+  list.innerHTML = html;
+
+  list.querySelectorAll('.store').forEach(el => {
+    el.addEventListener('click', e => {
+      if (e.target.closest('a')) return;
+      const m = markers[el.dataset.i];
+      map.setView(m.getLatLng(), 14);
+      m.openPopup();
+    });
+  });
+}
+
+function locate() {
+  if (!navigator.geolocation) { alert('이 브라우저는 위치 기능을 지원하지 않습니다.'); return; }
+  document.getElementById('status') && (document.getElementById('status').textContent = '위치 확인 중…');
+  navigator.geolocation.getCurrentPosition(pos => {
+    myPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    if (myMarker) myMarker.remove();
+    myMarker = L.circleMarker([myPos.lat, myPos.lng], {
+      radius:9, color:'#fff', weight:3, fillColor:'#2a7de1', fillOpacity:1
+    }).addTo(map).bindTooltip('내 위치');
+    map.setView([myPos.lat, myPos.lng], 12);
+    render(document.getElementById('search').value.trim());
+  }, err => {
+    render('');
+    const st = document.getElementById('status');
+    if (st) st.textContent = '위치를 가져올 수 없습니다 (' + err.message + ')';
+  }, { enableHighAccuracy:true, timeout:10000 });
+}
+
+locateBtn.addEventListener('click', locate);
+document.getElementById('search').addEventListener('input', e => render(e.target.value.trim()));
+
+render('');
+locate();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "주변 기독교서점 찾기",
+  "short_name": "기독교서점",
+  "description": "내 위치 주변의 기독교 서점을 찾아드립니다.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1a5d3a",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
