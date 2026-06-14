@@ -1,5 +1,5 @@
-const CACHE = 'bookstore-v2';
-const ASSETS = ['.', 'index.html', 'stores.js', 'manifest.webmanifest', 'icon.svg'];
+const CACHE = 'bookstore-v3';
+const ASSETS = ['.', 'index.html', 'stores.js', 'manifest.webmanifest', 'icon.svg', 'og.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
