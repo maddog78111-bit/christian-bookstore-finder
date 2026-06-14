@@ -1,4 +1,4 @@
-const CACHE = 'bookstore-v1';
+const CACHE = 'bookstore-v2';
 const ASSETS = ['.', 'index.html', 'stores.js', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', e => {
