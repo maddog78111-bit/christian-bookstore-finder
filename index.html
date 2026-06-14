@@ -41,6 +41,7 @@
   .btn-kakao { background:#FEE500; color:#3A1D1D; }
   .btn-naver { background:#03C75A; color:#fff; }
   .btn[aria-disabled="true"] { opacity:.4; pointer-events:none; }
+  .store.active { outline:2px solid var(--green); box-shadow:0 0 0 4px rgba(26,93,58,.15); }
   #status { text-align:center; font-size:12.5px; color:#888; padding:8px; }
   .hidden { display:none !important; }
 </style>
@@ -87,8 +88,39 @@ STORES.forEach((s, i) => {
       (s.t ? '<br><a href="tel:' + s.t.replace(/[^0-9+]/g,'') + '">📞 ' + s.t + '</a>' : '') +
       '<br>🧭 <a target="_blank" rel="noopener" href="https://map.kakao.com/link/to/' + nm + ',' + s.la + ',' + s.lo + '">카카오</a>' +
       ' · <a target="_blank" rel="noopener" href="https://map.naver.com/p/directions/-/' + s.lo + ',' + s.la + ',' + nm + '/-/car">네이버</a>')
+    .on('click', () => focusStoreInList(i))
     .addTo(map);
 });
+
+// 마커 클릭 시 아래 목록에서 해당 서점으로 스크롤 + 강조
+function focusStoreInList(i) {
+  const listEl = document.getElementById('list');
+  let card = listEl.querySelector('.store[data-i="' + i + '"]');
+  if (!card) {  // 검색으로 가려져 있으면 검색을 비우고 다시 표시
+    const search = document.getElementById('search');
+    if (search.value) { search.value = ''; render(''); }
+    card = listEl.querySelector('.store[data-i="' + i + '"]');
+  }
+  if (!card) return;
+  listEl.querySelectorAll('.store.active').forEach(e => e.classList.remove('active'));
+  card.classList.add('active');
+  const target = listEl.scrollTop + (card.getBoundingClientRect().top - listEl.getBoundingClientRect().top) - 6;
+  smoothScrollTo(listEl, Math.max(0, target));
+}
+
+// scroll-behavior 미지원 브라우저에서도 동작하는 부드러운 스크롤
+function smoothScrollTo(el, target) {
+  const start = el.scrollTop, diff = target - start, dur = 320;
+  let t0 = null;
+  function step(ts) {
+    if (t0 === null) t0 = ts;
+    const p = Math.min((ts - t0) / dur, 1);
+    const ease = p < 0.5 ? 2*p*p : 1 - Math.pow(-2*p + 2, 2) / 2;
+    el.scrollTop = start + diff * ease;
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
 
 function render(filter) {
   const list = document.getElementById('list');
@@ -102,7 +134,7 @@ function render(filter) {
   let html = '';
   if (!myPos) html += '<div id="status">📍 버튼을 누르면 가까운 순으로 정렬됩니다</div>';
   if (!items.length) html += '<div id="status">검색 결과가 없습니다</div>';
-  items.slice(0, 100).forEach(s => {
+  items.forEach(s => {
     const telClean = (s.t || '').replace(/[^0-9+]/g, '');
     html += '<div class="store" data-i="' + s.i + '">'
       + '<div class="store-top"><span class="store-name">' + s.n + '</span>'
