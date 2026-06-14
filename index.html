@@ -119,6 +119,17 @@ function render(filter) {
       m.openPopup();
     });
   });
+
+  // 검색 시 결과 위치로 지도 이동
+  if (filter && items.length) {
+    const pts = items.map(s => [s.la, s.lo]);
+    if (items.length === 1) {
+      map.setView(pts[0], 14);
+      markers[items[0].i].openPopup();
+    } else {
+      map.fitBounds(L.latLngBounds(pts).pad(0.15));
+    }
+  }
 }
 
 function locate() {
