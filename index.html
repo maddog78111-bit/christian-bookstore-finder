@@ -35,10 +35,11 @@
   .store-name { font-weight:bold; font-size:15px; color:#222; }
   .store-dist { color:var(--green); font-weight:bold; font-size:13px; white-space:nowrap; }
   .store-addr { font-size:12.5px; color:#666; margin-top:4px; line-height:1.45; }
-  .store-actions { display:flex; gap:8px; margin-top:9px; }
-  .btn { flex:1; text-align:center; padding:8px 0; border-radius:8px; font-size:13px; text-decoration:none; font-weight:bold; }
+  .store-actions { display:flex; gap:6px; margin-top:9px; }
+  .btn { flex:1; text-align:center; padding:9px 2px; border-radius:8px; font-size:12.5px; text-decoration:none; font-weight:bold; white-space:nowrap; }
   .btn-call { background:var(--light); color:var(--green); }
-  .btn-nav { background:var(--green); color:#fff; }
+  .btn-kakao { background:#FEE500; color:#3A1D1D; }
+  .btn-naver { background:#03C75A; color:#fff; }
   .btn[aria-disabled="true"] { opacity:.4; pointer-events:none; }
   #status { text-align:center; font-size:12.5px; color:#888; padding:8px; }
   .hidden { display:none !important; }
@@ -80,9 +81,12 @@ function fmtDist(km) { return km < 1 ? Math.round(km*1000)+'m' : km.toFixed(1)+'
 
 const markers = {};
 STORES.forEach((s, i) => {
+  const nm = encodeURIComponent(s.n.replace(/,/g,' '));
   markers[i] = L.marker([s.la, s.lo], { icon: storeIcon })
     .bindPopup('<b>' + s.n + '</b><br><small>' + s.a + '</small>' +
-      (s.t ? '<br><a href="tel:' + s.t.replace(/[^0-9+]/g,'') + '">📞 ' + s.t + '</a>' : ''))
+      (s.t ? '<br><a href="tel:' + s.t.replace(/[^0-9+]/g,'') + '">📞 ' + s.t + '</a>' : '') +
+      '<br>🧭 <a target="_blank" rel="noopener" href="https://map.kakao.com/link/to/' + nm + ',' + s.la + ',' + s.lo + '">카카오</a>' +
+      ' · <a target="_blank" rel="noopener" href="https://map.naver.com/p/directions/-/' + s.lo + ',' + s.la + ',' + nm + '/-/car">네이버</a>')
     .addTo(map);
 });
 
@@ -106,7 +110,8 @@ function render(filter) {
       + '<div class="store-addr">' + s.a + '</div>'
       + '<div class="store-actions">'
       + '<a class="btn btn-call" ' + (telClean ? 'href="tel:' + telClean + '"' : 'aria-disabled="true"') + '>📞 전화</a>'
-      + '<a class="btn btn-nav" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=' + s.la + ',' + s.lo + '">🧭 길안내</a>'
+      + '<a class="btn btn-kakao" target="_blank" rel="noopener" href="https://map.kakao.com/link/to/' + encodeURIComponent(s.n.replace(/,/g,' ')) + ',' + s.la + ',' + s.lo + '">카카오</a>'
+      + '<a class="btn btn-naver" target="_blank" rel="noopener" href="https://map.naver.com/p/directions/-/' + s.lo + ',' + s.la + ',' + encodeURIComponent(s.n.replace(/,/g,' ')) + '/-/car">네이버</a>'
       + '</div></div>';
   });
   list.innerHTML = html;
