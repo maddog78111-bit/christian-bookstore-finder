@@ -193,7 +193,23 @@ document.getElementById('search').addEventListener('input', e => render(e.target
 render('');
 locate();
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+if ('serviceWorker' in navigator) {
+  // 새 서비스워커가 제어를 넘겨받으면 한 번 자동 새로고침 → 항상 최신 데이터
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    location.reload();
+  });
+  // 등록 후 즉시 업데이트 확인 (sw.js는 install 시 skipWaiting → 새 버전이 바로 활성화)
+  navigator.serviceWorker.register('sw.js').then(reg => reg.update());
+  // 탭이 다시 보일 때 업데이트 체크
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      navigator.serviceWorker.getRegistration().then(r => r && r.update());
+    }
+  });
+}
 </script>
 </body>
 </html>
