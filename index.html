@@ -299,8 +299,7 @@ function render(filter, append) {
     const remain = matched - shown.length;
     html += '<button id="more" type="button">+ ' + Math.min(PAGE, remain) + '곳 더보기 <span style="color:#999;font-weight:normal">(남은 ' + remain + '곳)</span></button>';
   }
-  html += '<div id="report"><a href="mailto:maddog78111@gmail.com?subject=' + encodeURIComponent('[기독교서점 찾기] 정보 제보')
-    + '&body=' + encodeURIComponent('서점명:\n잘못된/빠진 내용:\n올바른 정보:\n') + '">📮 정보가 틀렸거나 빠진 서점이 있나요? 제보하기</a></div>';
+  html += '<div id="report"><a href="https://forms.gle/cTtMPtng9ju2sJ3y5" target="_blank" rel="noopener">📮 정보가 틀렸거나 빠진 서점이 있나요? 제보하기</a></div>';
 
   list.innerHTML = html;
 
