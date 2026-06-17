@@ -46,6 +46,12 @@
   #count { position:sticky; top:0; z-index:5; background:#fff; border-bottom:1px solid #eee;
     font-size:13px; color:#444; padding:9px 14px; font-weight:bold; }
   #count b { color:var(--green); }
+  #chips { display:flex; gap:7px; overflow-x:auto; padding:8px 10px; background:#fff;
+    border-bottom:1px solid #eee; flex-shrink:0; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  #chips::-webkit-scrollbar { display:none; }
+  .chip { flex:0 0 auto; padding:6px 14px; border-radius:16px; border:1px solid #cfe0d5;
+    background:#fff; color:#333; font-size:13px; cursor:pointer; white-space:nowrap; }
+  .chip.active { background:var(--green); color:#fff; border-color:var(--green); font-weight:bold; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -54,6 +60,7 @@
   <h1>📖 주변 기독교서점</h1>
   <input id="search" type="search" placeholder="서점명·지역 검색 (예: 부산)">
 </header>
+<div id="chips"></div>
 <div id="map"></div>
 <div id="list"><div id="status">위치 확인 중…</div></div>
 
@@ -83,6 +90,37 @@ function dist(a, b, c, d) {
 }
 function fmtDist(km) { return km < 1 ? Math.round(km*1000)+'m' : km.toFixed(1)+'km'; }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// 주소 → 시/도 분류 (표기 흔들림 + 시·도 생략 주소 보정)
+function regionOf(addr) {
+  const a = String(addr).trim();
+  if (/^서울/.test(a)) return '서울';
+  if (/^부산/.test(a)) return '부산';
+  if (/^대구/.test(a)) return '대구';
+  if (/^인천/.test(a)) return '인천';
+  if (/^대전/.test(a)) return '대전';
+  if (/^울산/.test(a)) return '울산';
+  if (/^광주/.test(a)) return '광주';
+  if (/^(세종|충청남도 연기|충남 연기)/.test(a)) return '세종';
+  if (/^경기/.test(a)) return '경기';
+  if (/^강원/.test(a)) return '강원';
+  if (/^(충청북도|충북)/.test(a)) return '충북';
+  if (/^(충청남도|충남)/.test(a)) return '충남';
+  if (/^(전라북도|전북)/.test(a)) return '전북';
+  if (/^(전라남도|전남)/.test(a)) return '전남';
+  if (/^(경상북도|경북)/.test(a)) return '경북';
+  if (/^(경상남도|경남)/.test(a)) return '경남';
+  if (/^제주/.test(a)) return '제주';
+  // 시/도 접두어가 생략된 주소 보정 (구·시명으로 판정)
+  if (/(종로구|용산구|성동구|광진구|동대문구|중랑구|성북구|강북구|도봉구|노원구|은평구|서대문구|마포구|양천구|강서구|구로구|금천구|영등포구|동작구|관악구|서초구|강남구|송파구|강동구)/.test(a)) return '서울';
+  if (/(부천시|안산시|수원시|성남시|용인시|고양시|안양시|군포시|김포시|광명시|평택시|시흥시|화성시|남양주시|의정부시|파주시|오산시|이천시)/.test(a)) return '경기';
+  if (/창원시/.test(a)) return '경남';
+  if (/군산시/.test(a)) return '전북';
+  if (/충주시/.test(a)) return '충북';
+  return '기타';
+}
+const REGION_ORDER = ['서울','경기','인천','부산','대구','광주','대전','울산','세종','강원','충북','충남','전북','전남','경북','경남','제주'];
+let activeRegion = null;
 
 const markers = {};
 STORES.forEach((s, i) => {
@@ -129,6 +167,7 @@ function smoothScrollTo(el, target) {
 function render(filter) {
   const list = document.getElementById('list');
   let items = STORES.map((s, i) => ({ ...s, i, d: myPos ? dist(myPos.lat, myPos.lng, s.la, s.lo) : null }));
+  if (activeRegion) items = items.filter(s => regionOf(s.a) === activeRegion);
   if (filter) {
     const f = filter.toLowerCase();
     items = items.filter(s => s.n.toLowerCase().includes(f) || s.a.toLowerCase().includes(f));
@@ -138,11 +177,12 @@ function render(filter) {
   const total = STORES.length;
   let countText;
   if (filter) countText = '‘' + esc(filter) + '’ 검색 · <b>' + items.length + '곳</b>';
+  else if (activeRegion) countText = activeRegion + ' · <b>' + items.length + '곳</b>';
   else if (myPos) countText = '가까운 순 · 전국 <b>' + total + '곳</b>';
   else countText = '전국 <b>' + total + '곳</b>';
 
   let html = '<div id="count">' + countText + '</div>';
-  if (!myPos && !filter) html += '<div id="status">📍 버튼을 누르면 가까운 순으로 정렬됩니다</div>';
+  if (!myPos && !filter && !activeRegion) html += '<div id="status">📍 버튼을 누르면 가까운 순으로 정렬됩니다</div>';
   if (!items.length) html += '<div id="status">검색 결과가 없습니다</div>';
   items.forEach(s => {
     const telClean = (s.t || '').replace(/[^0-9+]/g, '');
@@ -167,8 +207,8 @@ function render(filter) {
     });
   });
 
-  // 검색 시 결과 위치로 지도 이동
-  if (filter && items.length) {
+  // 검색·지역 선택 시 결과 위치로 지도 이동
+  if ((filter || activeRegion) && items.length) {
     const pts = items.map(s => [s.la, s.lo]);
     if (items.length === 1) {
       map.setView(pts[0], 14);
@@ -197,9 +237,38 @@ function locate() {
   }, { enableHighAccuracy:true, timeout:10000 });
 }
 
-locateBtn.addEventListener('click', locate);
-document.getElementById('search').addEventListener('input', e => render(e.target.value.trim()));
+// 시/도 칩: 데이터에 실제 존재하는 지역만 표시
+function buildChips() {
+  const present = new Set(STORES.map(s => regionOf(s.a)));
+  const regions = REGION_ORDER.filter(r => present.has(r));
+  const bar = document.getElementById('chips');
+  bar.innerHTML = '<button class="chip" data-region="">전체</button>'
+    + regions.map(r => '<button class="chip" data-region="' + r + '">' + r + '</button>').join('');
+  bar.querySelectorAll('.chip').forEach(c => {
+    c.addEventListener('click', () => {
+      const r = c.dataset.region || null;
+      activeRegion = (activeRegion === r) ? null : r;  // 같은 칩 다시 누르면 해제
+      const search = document.getElementById('search');
+      if (activeRegion) search.value = '';            // 지역 선택 시 검색어 비움
+      updateChips();
+      render(search.value.trim());
+    });
+  });
+  updateChips();
+}
+function updateChips() {
+  document.querySelectorAll('#chips .chip').forEach(c => {
+    c.classList.toggle('active', (c.dataset.region || null) === activeRegion);
+  });
+}
 
+locateBtn.addEventListener('click', locate);
+document.getElementById('search').addEventListener('input', e => {
+  if (e.target.value.trim()) { activeRegion = null; updateChips(); }  // 검색하면 지역칩 해제
+  render(e.target.value.trim());
+});
+
+buildChips();
 render('');
 locate();
 
