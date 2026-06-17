@@ -52,6 +52,19 @@
   .chip { flex:0 0 auto; padding:6px 14px; border-radius:16px; border:1px solid #cfe0d5;
     background:#fff; color:#333; font-size:13px; cursor:pointer; white-space:nowrap; }
   .chip.active { background:var(--green); color:#fff; border-color:var(--green); font-weight:bold; }
+  #fontBtn { flex-shrink:0; background:rgba(255,255,255,.2); color:#fff; border:1px solid rgba(255,255,255,.7);
+    border-radius:14px; padding:5px 10px; font-size:13px; font-weight:bold; cursor:pointer; line-height:1; }
+  #fontBtn.on { background:#fff; color:var(--green); }
+  /* 큰글씨 모드 */
+  body.big header h1 { font-size:19px; }
+  body.big #search { font-size:16px; }
+  body.big .chip { font-size:15px; padding:8px 16px; }
+  body.big #count { font-size:15px; }
+  body.big .store-name { font-size:18px; }
+  body.big .store-dist { font-size:15px; }
+  body.big .store-addr { font-size:15px; }
+  body.big .btn { font-size:15px; padding:11px 2px; }
+  body.big #status { font-size:14.5px; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -59,6 +72,7 @@
 <header>
   <h1>📖 주변 기독교서점</h1>
   <input id="search" type="search" placeholder="서점명·지역 검색 (예: 부산)">
+  <button id="fontBtn" type="button" title="큰글씨" aria-pressed="false">가＋</button>
 </header>
 <div id="chips"></div>
 <div id="map"></div>
@@ -261,6 +275,23 @@ function updateChips() {
     c.classList.toggle('active', (c.dataset.region || null) === activeRegion);
   });
 }
+
+// 큰글씨 토글 (설정은 localStorage에 저장 → 다음 방문에도 유지)
+const fontBtn = document.getElementById('fontBtn');
+function applyBig(on) {
+  document.body.classList.toggle('big', on);
+  fontBtn.classList.toggle('on', on);
+  fontBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  setTimeout(() => map.invalidateSize(), 0);  // 헤더/칩 높이 변동 시 지도 영역 재계산
+}
+let bigOn = false;
+try { bigOn = localStorage.getItem('bigFont') === '1'; } catch (e) {}
+applyBig(bigOn);
+fontBtn.addEventListener('click', () => {
+  bigOn = !bigOn;
+  try { localStorage.setItem('bigFont', bigOn ? '1' : '0'); } catch (e) {}
+  applyBig(bigOn);
+});
 
 locateBtn.addEventListener('click', locate);
 document.getElementById('search').addEventListener('input', e => {
