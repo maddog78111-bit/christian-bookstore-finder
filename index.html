@@ -18,6 +18,8 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
 <style>
   :root { --green:#1a5d3a; --light:#e8f3ec; }
   * { box-sizing:border-box; }
@@ -48,6 +50,10 @@
   .retry { margin-top:12px; background:var(--green); color:#fff; border:none; border-radius:8px;
     padding:9px 20px; font-size:13px; font-weight:bold; cursor:pointer; }
   body.big #status.notice { font-size:15.5px; }
+  /* 마커 클러스터 색상 (테마 초록) */
+  .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background:rgba(26,93,58,.25); }
+  .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
+    background:var(--green); color:#fff; font-weight:bold; }
   #count { position:sticky; top:0; z-index:5; background:#fff; border-bottom:1px solid #eee;
     font-size:13px; color:#444; padding:9px 14px; font-weight:bold; }
   #count b { color:var(--green); }
@@ -84,6 +90,7 @@
 <div id="list"><div id="status">위치 확인 중…</div></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="stores.js"></script>
 <script>
 const map = L.map('map', { zoomControl:false }).setView([36.5, 127.8], 7);
@@ -141,6 +148,11 @@ function regionOf(addr) {
 const REGION_ORDER = ['서울','경기','인천','부산','대구','광주','대전','울산','세종','강원','충북','충남','전북','전남','경북','경남','제주'];
 let activeRegion = null;
 
+const clusterGroup = L.markerClusterGroup({
+  maxClusterRadius: 50,
+  showCoverageOnHover: false,
+  spiderfyOnMaxZoom: true
+});
 const markers = {};
 STORES.forEach((s, i) => {
   const nm = encodeURIComponent(s.n.replace(/,/g,' '));
@@ -149,9 +161,21 @@ STORES.forEach((s, i) => {
       (s.t ? '<br><a href="tel:' + s.t.replace(/[^0-9+]/g,'') + '">📞 ' + s.t + '</a>' : '') +
       '<br>🧭 <a target="_blank" rel="noopener" href="https://map.kakao.com/link/to/' + nm + ',' + s.la + ',' + s.lo + '">카카오</a>' +
       ' · <a target="_blank" rel="noopener" href="https://map.naver.com/p/directions/-/' + s.lo + ',' + s.la + ',' + nm + '/-/car">네이버</a>')
-    .on('click', () => focusStoreInList(i))
-    .addTo(map);
+    .on('click', () => focusStoreInList(i));
+  clusterGroup.addLayer(markers[i]);
 });
+map.addLayer(clusterGroup);
+
+// 클러스터에 묶인 마커도 펼쳐서 보여준 뒤 팝업 열기
+function showMarker(i) {
+  const m = markers[i];
+  if (clusterGroup.zoomToShowLayer) {
+    clusterGroup.zoomToShowLayer(m, () => m.openPopup());
+  } else {
+    map.setView(m.getLatLng(), 14);
+    m.openPopup();
+  }
+}
 
 // 마커 클릭 시 아래 목록에서 해당 서점으로 스크롤 + 강조
 function focusStoreInList(i) {
@@ -220,9 +244,7 @@ function render(filter) {
   list.querySelectorAll('.store').forEach(el => {
     el.addEventListener('click', e => {
       if (e.target.closest('a')) return;
-      const m = markers[el.dataset.i];
-      map.setView(m.getLatLng(), 14);
-      m.openPopup();
+      showMarker(el.dataset.i);
     });
   });
 
@@ -230,8 +252,7 @@ function render(filter) {
   if ((filter || activeRegion) && items.length) {
     const pts = items.map(s => [s.la, s.lo]);
     if (items.length === 1) {
-      map.setView(pts[0], 14);
-      markers[items[0].i].openPopup();
+      showMarker(items[0].i);
     } else {
       map.fitBounds(L.latLngBounds(pts).pad(0.15));
     }
