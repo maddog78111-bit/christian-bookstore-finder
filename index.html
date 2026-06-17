@@ -44,6 +44,19 @@
   .btn-naver { background:#03C75A; color:#fff; }
   .btn[aria-disabled="true"] { opacity:.4; pointer-events:none; }
   .store.active { outline:2px solid var(--green); box-shadow:0 0 0 4px rgba(26,93,58,.15); }
+  .store-meta { display:flex; align-items:center; gap:2px; white-space:nowrap; flex-shrink:0; }
+  .icon-btn { background:none; border:none; cursor:pointer; line-height:1; padding:3px 4px; color:#c4c4c4; }
+  .icon-btn.fav { font-size:18px; }
+  .icon-btn.fav.on { color:#f5b301; }
+  .icon-btn.share { font-size:15px; color:#9a9a9a; }
+  #more { display:block; width:calc(100% - 20px); margin:2px 10px 14px; padding:11px; text-align:center;
+    background:#fff; border:1px solid #cfe0d5; border-radius:10px; color:var(--green);
+    font-weight:bold; font-size:13.5px; cursor:pointer; }
+  #report { text-align:center; padding:6px 16px 22px; }
+  #report a { color:#9a9a9a; font-size:12.5px; text-decoration:none; }
+  #report a:hover { text-decoration:underline; }
+  body.big .icon-btn.fav { font-size:21px; }
+  body.big #more, body.big #report a { font-size:15px; }
   #status { text-align:center; font-size:12.5px; color:#888; padding:8px; }
   #status.notice { color:#555; line-height:1.7; padding:18px 16px; font-size:13.5px; }
   #status.notice b { color:var(--green); }
@@ -147,6 +160,33 @@ function regionOf(addr) {
 }
 const REGION_ORDER = ['서울','경기','인천','부산','대구','광주','대전','울산','세종','강원','충북','충남','전북','전남','경북','경남','제주'];
 let activeRegion = null;
+let favOnly = false;
+const PAGE = 20;        // 한 번에 보여줄 서점 수
+let shownLimit = PAGE;
+
+// 즐겨찾기 (localStorage 저장, 이름+좌표로 식별 → 데이터 순서 바뀌어도 안전)
+let favs = new Set();
+try { favs = new Set(JSON.parse(localStorage.getItem('favs') || '[]')); } catch (e) {}
+function favKey(s) { return s.n + '@' + s.la + ',' + s.lo; }
+function isFav(s) { return favs.has(favKey(s)); }
+function toggleFav(s) {
+  const k = favKey(s);
+  if (favs.has(k)) favs.delete(k); else favs.add(k);
+  try { localStorage.setItem('favs', JSON.stringify([...favs])); } catch (e) {}
+}
+
+// 서점 정보 공유 (지원 시 네이티브 공유, 아니면 클립보드 복사)
+const SITE_URL = 'https://maddog78111-bit.github.io/christian-bookstore-finder/';
+function shareStore(s) {
+  const text = s.n + '\n' + s.a + (s.t ? '\n📞 ' + s.t : '') + '\n\n📍 주변 기독교서점 찾기\n' + SITE_URL;
+  if (navigator.share) {
+    navigator.share({ title: s.n, text }).catch(() => {});
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => alert('서점 정보가 복사되었어요.')).catch(() => prompt('복사해서 공유하세요:', text));
+  } else {
+    prompt('복사해서 공유하세요:', text);
+  }
+}
 
 const clusterGroup = L.markerClusterGroup({
   maxClusterRadius: 50,
@@ -181,9 +221,11 @@ function showMarker(i) {
 function focusStoreInList(i) {
   const listEl = document.getElementById('list');
   let card = listEl.querySelector('.store[data-i="' + i + '"]');
-  if (!card) {  // 검색으로 가려져 있으면 검색을 비우고 다시 표시
-    const search = document.getElementById('search');
-    if (search.value) { search.value = ''; render(''); }
+  if (!card) {  // 검색·지역·즐겨찾기·페이지 제한으로 가려진 경우 전체 보기로 펼침
+    document.getElementById('search').value = '';
+    activeRegion = null; favOnly = false; updateChips();
+    shownLimit = STORES.length;
+    render('', true);
     card = listEl.querySelector('.store[data-i="' + i + '"]');
   }
   if (!card) return;
@@ -207,9 +249,11 @@ function smoothScrollTo(el, target) {
   requestAnimationFrame(step);
 }
 
-function render(filter) {
+function render(filter, append) {
+  if (!append) shownLimit = PAGE;   // 필터/검색이 바뀌면 처음부터, 더보기는 유지
   const list = document.getElementById('list');
   let items = STORES.map((s, i) => ({ ...s, i, d: myPos ? dist(myPos.lat, myPos.lng, s.la, s.lo) : null }));
+  if (favOnly) items = items.filter(isFav);
   if (activeRegion) items = items.filter(s => regionOf(s.a) === activeRegion);
   if (filter) {
     const f = filter.toLowerCase();
@@ -217,45 +261,75 @@ function render(filter) {
   }
   if (myPos) items.sort((a, b) => a.d - b.d);
 
+  const matched = items.length;
+  const shown = items.slice(0, shownLimit);
   const total = STORES.length;
+
   let countText;
-  if (filter) countText = '‘' + esc(filter) + '’ 검색 · <b>' + items.length + '곳</b>';
-  else if (activeRegion) countText = activeRegion + ' · <b>' + items.length + '곳</b>';
+  if (filter) countText = '‘' + esc(filter) + '’ 검색 · <b>' + matched + '곳</b>';
+  else if (favOnly) countText = '⭐ 즐겨찾기 · <b>' + matched + '곳</b>';
+  else if (activeRegion) countText = activeRegion + ' · <b>' + matched + '곳</b>';
   else if (myPos) countText = '가까운 순 · 전국 <b>' + total + '곳</b>';
   else countText = '전국 <b>' + total + '곳</b>';
 
   let html = '<div id="count">' + countText + '</div>';
-  if (!myPos && !filter && !activeRegion) html += '<div id="status">📍 버튼을 누르면 가까운 순으로 정렬됩니다</div>';
-  if (!items.length) html += '<div id="status">검색 결과가 없습니다</div>';
-  items.forEach(s => {
+  if (!myPos && !filter && !activeRegion && !favOnly) html += '<div id="status">📍 버튼을 누르면 가까운 순으로 정렬됩니다</div>';
+  if (!matched) html += '<div id="status">' + (favOnly ? '아직 즐겨찾기한 서점이 없어요' : '검색 결과가 없습니다') + '</div>';
+
+  shown.forEach(s => {
     const telClean = (s.t || '').replace(/[^0-9+]/g, '');
+    const nm = encodeURIComponent(s.n.replace(/,/g,' '));
+    const fav = isFav(s);
     html += '<div class="store" data-i="' + s.i + '">'
       + '<div class="store-top"><span class="store-name">' + s.n + '</span>'
-      + (s.d != null ? '<span class="store-dist">' + fmtDist(s.d) + '</span>' : '') + '</div>'
+      + '<span class="store-meta">'
+      + (s.d != null ? '<span class="store-dist">' + fmtDist(s.d) + '</span>' : '')
+      + '<button class="icon-btn fav' + (fav ? ' on' : '') + '" data-i="' + s.i + '" title="즐겨찾기" aria-label="즐겨찾기" aria-pressed="' + fav + '">' + (fav ? '★' : '☆') + '</button>'
+      + '<button class="icon-btn share" data-i="' + s.i + '" title="공유" aria-label="공유">↗</button>'
+      + '</span></div>'
       + '<div class="store-addr">' + s.a + '</div>'
       + '<div class="store-actions">'
       + '<a class="btn btn-call" ' + (telClean ? 'href="tel:' + telClean + '"' : 'aria-disabled="true"') + '>📞 전화</a>'
-      + '<a class="btn btn-kakao" target="_blank" rel="noopener" href="https://map.kakao.com/link/to/' + encodeURIComponent(s.n.replace(/,/g,' ')) + ',' + s.la + ',' + s.lo + '">카카오</a>'
-      + '<a class="btn btn-naver" target="_blank" rel="noopener" href="https://map.naver.com/p/directions/-/' + s.lo + ',' + s.la + ',' + encodeURIComponent(s.n.replace(/,/g,' ')) + '/-/car">네이버</a>'
+      + '<a class="btn btn-kakao" target="_blank" rel="noopener" href="https://map.kakao.com/link/to/' + nm + ',' + s.la + ',' + s.lo + '">카카오</a>'
+      + '<a class="btn btn-naver" target="_blank" rel="noopener" href="https://map.naver.com/p/directions/-/' + s.lo + ',' + s.la + ',' + nm + '/-/car">네이버</a>'
       + '</div></div>';
   });
+
+  if (shown.length < matched) {
+    const remain = matched - shown.length;
+    html += '<button id="more" type="button">+ ' + Math.min(PAGE, remain) + '곳 더보기 <span style="color:#999;font-weight:normal">(남은 ' + remain + '곳)</span></button>';
+  }
+  html += '<div id="report"><a href="mailto:maddog78111@gmail.com?subject=' + encodeURIComponent('[기독교서점 찾기] 정보 제보')
+    + '&body=' + encodeURIComponent('서점명:\n잘못된/빠진 내용:\n올바른 정보:\n') + '">📮 정보가 틀렸거나 빠진 서점이 있나요? 제보하기</a></div>';
+
   list.innerHTML = html;
 
   list.querySelectorAll('.store').forEach(el => {
     el.addEventListener('click', e => {
-      if (e.target.closest('a')) return;
+      if (e.target.closest('a, button')) return;   // 링크·아이콘 버튼 클릭은 카드 이동에서 제외
       showMarker(el.dataset.i);
     });
   });
+  list.querySelectorAll('.icon-btn.fav').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    toggleFav(STORES[b.dataset.i]);
+    render(document.getElementById('search').value.trim(), true);   // 페이지·필터 상태 유지
+  }));
+  list.querySelectorAll('.icon-btn.share').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    shareStore(STORES[b.dataset.i]);
+  }));
+  const moreBtn = document.getElementById('more');
+  if (moreBtn) moreBtn.addEventListener('click', () => {
+    shownLimit += PAGE;
+    render(document.getElementById('search').value.trim(), true);
+  });
 
-  // 검색·지역 선택 시 결과 위치로 지도 이동
-  if ((filter || activeRegion) && items.length) {
+  // 검색·지역·즐겨찾기 선택 시 결과 위치로 지도 이동
+  if ((filter || activeRegion || favOnly) && matched) {
     const pts = items.map(s => [s.la, s.lo]);
-    if (items.length === 1) {
-      showMarker(items[0].i);
-    } else {
-      map.fitBounds(L.latLngBounds(pts).pad(0.15));
-    }
+    if (matched === 1) showMarker(items[0].i);
+    else map.fitBounds(L.latLngBounds(pts).pad(0.15));
   }
 }
 
@@ -300,14 +374,21 @@ function buildChips() {
   const present = new Set(STORES.map(s => regionOf(s.a)));
   const regions = REGION_ORDER.filter(r => present.has(r));
   const bar = document.getElementById('chips');
-  bar.innerHTML = '<button class="chip" data-region="">전체</button>'
+  bar.innerHTML = '<button class="chip chip-fav" data-fav="1" title="즐겨찾기만 보기">⭐</button>'
+    + '<button class="chip" data-region="">전체</button>'
     + regions.map(r => '<button class="chip" data-region="' + r + '">' + r + '</button>').join('');
   bar.querySelectorAll('.chip').forEach(c => {
     c.addEventListener('click', () => {
-      const r = c.dataset.region || null;
-      activeRegion = (activeRegion === r) ? null : r;  // 같은 칩 다시 누르면 해제
       const search = document.getElementById('search');
-      if (activeRegion) search.value = '';            // 지역 선택 시 검색어 비움
+      if (c.dataset.fav) {                 // ⭐ 즐겨찾기 칩
+        favOnly = !favOnly;
+        if (favOnly) { activeRegion = null; search.value = ''; }
+      } else {                             // 지역 칩
+        const r = c.dataset.region || null;
+        activeRegion = (activeRegion === r) ? null : r;  // 같은 칩 다시 누르면 해제
+        favOnly = false;
+        if (activeRegion) search.value = '';
+      }
       updateChips();
       render(search.value.trim());
     });
@@ -316,7 +397,8 @@ function buildChips() {
 }
 function updateChips() {
   document.querySelectorAll('#chips .chip').forEach(c => {
-    c.classList.toggle('active', (c.dataset.region || null) === activeRegion);
+    if (c.dataset.fav) c.classList.toggle('active', favOnly);
+    else c.classList.toggle('active', !favOnly && (c.dataset.region || null) === activeRegion);
   });
 }
 
@@ -338,9 +420,12 @@ fontBtn.addEventListener('click', () => {
 });
 
 locateBtn.addEventListener('click', locate);
+let searchTimer;
 document.getElementById('search').addEventListener('input', e => {
-  if (e.target.value.trim()) { activeRegion = null; updateChips(); }  // 검색하면 지역칩 해제
-  render(e.target.value.trim());
+  const v = e.target.value.trim();
+  if (v && (activeRegion || favOnly)) { activeRegion = null; favOnly = false; updateChips(); }  // 검색하면 칩 해제
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => render(v), 180);   // 입력 끊김 방지 (디바운스)
 });
 
 buildChips();
