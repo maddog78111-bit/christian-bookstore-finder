@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>주변 기독교서점 찾기</title>
-<meta name="description" content="내 위치로 가까운 기독교 서점을 바로 찾으세요. 전국 239곳, 전화·길안내 연결.">
+<meta name="description" content="내 위치로 가까운 기독교 서점을 바로 찾으세요. 전국 기독교서점 전화·길안내 연결.">
 <meta name="theme-color" content="#1a5d3a">
 <!-- 카카오톡/SNS 공유 미리보기 (Open Graph) -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="주변 기독교서점 찾기">
-<meta property="og:description" content="내 위치로 가까운 기독교 서점을 바로 찾으세요. 전국 239곳, 전화·길안내 연결.">
+<meta property="og:description" content="내 위치로 가까운 기독교 서점을 바로 찾으세요. 전국 기독교서점 전화·길안내 연결.">
 <meta property="og:image" content="https://maddog78111-bit.github.io/christian-bookstore-finder/og.png">
 <meta property="og:image:width" content="800">
 <meta property="og:image:height" content="400">
@@ -43,6 +43,9 @@
   .btn[aria-disabled="true"] { opacity:.4; pointer-events:none; }
   .store.active { outline:2px solid var(--green); box-shadow:0 0 0 4px rgba(26,93,58,.15); }
   #status { text-align:center; font-size:12.5px; color:#888; padding:8px; }
+  #count { position:sticky; top:0; z-index:5; background:#fff; border-bottom:1px solid #eee;
+    font-size:13px; color:#444; padding:9px 14px; font-weight:bold; }
+  #count b { color:var(--green); }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -79,6 +82,7 @@ function dist(a, b, c, d) {
   return 2*R*Math.asin(Math.sqrt(x));
 }
 function fmtDist(km) { return km < 1 ? Math.round(km*1000)+'m' : km.toFixed(1)+'km'; }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 const markers = {};
 STORES.forEach((s, i) => {
@@ -131,8 +135,14 @@ function render(filter) {
   }
   if (myPos) items.sort((a, b) => a.d - b.d);
 
-  let html = '';
-  if (!myPos) html += '<div id="status">📍 버튼을 누르면 가까운 순으로 정렬됩니다</div>';
+  const total = STORES.length;
+  let countText;
+  if (filter) countText = '‘' + esc(filter) + '’ 검색 · <b>' + items.length + '곳</b>';
+  else if (myPos) countText = '가까운 순 · 전국 <b>' + total + '곳</b>';
+  else countText = '전국 <b>' + total + '곳</b>';
+
+  let html = '<div id="count">' + countText + '</div>';
+  if (!myPos && !filter) html += '<div id="status">📍 버튼을 누르면 가까운 순으로 정렬됩니다</div>';
   if (!items.length) html += '<div id="status">검색 결과가 없습니다</div>';
   items.forEach(s => {
     const telClean = (s.t || '').replace(/[^0-9+]/g, '');
