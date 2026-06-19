@@ -129,6 +129,11 @@ function dist(a, b, c, d) {
 }
 function fmtDist(km) { return km < 1 ? Math.round(km*1000)+'m' : km.toFixed(1)+'km'; }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// 전화번호가 여러 개(쉼표·슬래시·범위·괄호 등)면 첫 번째 번호만 추출 → 바로 전화 걸기
+function firstTel(t) {
+  if (!t) return '';
+  return String(t).split(/[,/;~]|\(|외|\s{2,}/)[0].replace(/[^0-9+]/g, '');
+}
 
 // 주소 → 시/도 분류 (표기 흔들림 + 시·도 생략 주소 보정)
 function regionOf(addr) {
@@ -198,7 +203,7 @@ STORES.forEach((s, i) => {
   const nm = encodeURIComponent(s.n.replace(/,/g,' '));
   markers[i] = L.marker([s.la, s.lo], { icon: storeIcon })
     .bindPopup('<b>' + s.n + '</b><br><small>' + s.a + '</small>' +
-      (s.t ? '<br><a href="tel:' + s.t.replace(/[^0-9+]/g,'') + '">📞 ' + s.t + '</a>' : '') +
+      (s.t ? '<br><a href="tel:' + firstTel(s.t) + '">📞 ' + s.t + '</a>' : '') +
       '<br>🧭 <a target="_blank" rel="noopener" href="https://map.kakao.com/link/to/' + nm + ',' + s.la + ',' + s.lo + '">카카오</a>' +
       ' · <a target="_blank" rel="noopener" href="https://map.naver.com/p/directions/-/' + s.lo + ',' + s.la + ',' + nm + '/-/car">네이버</a>')
     .on('click', () => focusStoreInList(i));
@@ -277,7 +282,7 @@ function render(filter, append) {
   if (!matched) html += '<div id="status">' + (favOnly ? '아직 즐겨찾기한 서점이 없어요' : '검색 결과가 없습니다') + '</div>';
 
   shown.forEach(s => {
-    const telClean = (s.t || '').replace(/[^0-9+]/g, '');
+    const telClean = firstTel(s.t);
     const nm = encodeURIComponent(s.n.replace(/,/g,' '));
     const fav = isFav(s);
     html += '<div class="store" data-i="' + s.i + '">'
